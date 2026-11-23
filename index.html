@@ -225,7 +225,9 @@
   .c4cell{ width:38px; height:38px; border-radius:50%; background:#fff; cursor:pointer; }
   .c4cell.p1{ background:#f5c344; }
   .c4cell.p2{ background:#e0453f; }
-  .c4-status{ margin-top:12px; font-size:12px; color:var(--ink-soft); text-align:center; }
+  /* la scritta di stato ora appare solo in chat (vedi setMatchStatus/.m-bubble.status): questo
+     elemento resta nel markup per compatibilità col codice ma non è più visibile sotto la griglia */
+  .c4-status{ display:none; }
   .match-chat-col{ flex:1; display:flex; flex-direction:column; }
   .match-log{ flex:1; overflow:auto; padding:14px 14px 70px; display:flex; flex-direction:column; gap:10px; }
   .m-bubble{ max-width:85%; padding:9px 12px; border-radius:13px; font-size:12.5px; line-height:1.5; background:#f0f0f0; align-self:flex-start; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
@@ -1230,7 +1232,7 @@
     setMatchStatus(dialogueComingUp ? 'Scegli una domanda' : 'È IL TURNO DI MARTINA');
     const hasDialogue = offerQuestions();
     if(!hasDialogue){
-      setTimeout(martinaMove, 80);
+      setTimeout(martinaMove, 650);
     }
   }
   function c4ValidCols(){
@@ -1474,7 +1476,7 @@
           box.innerHTML = '';
           dialogueStage = choiceIndex + 1;
           setMatchStatus('È IL TURNO DI MARTINA');
-          setTimeout(martinaMove, 80);
+          setTimeout(martinaMove, 650);
         }, 350);
       };
       box.appendChild(btn);
@@ -1485,7 +1487,7 @@
       document.getElementById('match-options').innerHTML = '';
       setMatchStatus('È IL TURNO DI MARTINA');
       dialogueStage = 4;
-      setTimeout(martinaMove, 80);
+      setTimeout(martinaMove, 650);
       return;
     }
     setTimeout(()=>{
@@ -1493,22 +1495,52 @@
       playMartinaFinal(idx + 1);
     }, 350);
   }
-  /* Link fisso all'altro artefatto (labirinternet-phone.html) pubblicato su claude.ai: sia il QR
-     code sia il tocco sull'icona/notifica di WhatsApp portano qui. IMPORTANTE: perché un telefono
-     diverso da quello del proprietario possa aprirlo scansionando il QR durante lo spettacolo,
-     questo link (e quello del telefono) devono essere condivisi da "Solo io" a "Chiunque abbia il
-     link" dal menu Condividi della pagina, altrimenti chi scansiona il QR si troverà davanti a una
-     richiesta di accesso invece che al gioco. */
-  const PHONE_URL = "https://claude.ai/artifact/N38WniADXm6btwDgwp4fdG";
+  /* Link alla pagina del telefono (labirinternet-phone.html), ora ospitata su Vercel insieme a
+     questa pagina: sia il QR code sia il tocco sull'icona/notifica di WhatsApp portano qui. Deve
+     essere un indirizzo COMPLETO (con https://...) perché il QR code venga letto correttamente
+     anche da un telefono che parte dalla fotocamera, non dal browser. Se in futuro il progetto
+     viene rinominato su Vercel (cambia il sottodominio *.vercel.app), questo link va aggiornato. */
+  const PHONE_URL = "https://labirinternet23nov.vercel.app/labirinternet-phone.html";
   function renderWaQrCode(){
     waAccessGranted = true;
     const el = document.getElementById('wa-qrcode');
     if(!el || el.dataset.rendered === '1') return;
     el.dataset.rendered = '1';
     new QRCode(el, { text: PHONE_URL, width: 140, height: 140 });
+    startPcFinaleListener(); /* da questo momento il PC resta in ascolto: quando il telefono
+      finisce la chat con Benedetta, mostra anche qui la schermata finale */
   }
   function openPhoneChat(){
     window.location.href = PHONE_URL;
+  }
+
+  /* ---------- "telefono e PC che si parlano": lo stesso canale usato da labirinternet-phone.html
+     (vedi SYNC_TOPIC lì) tramite ntfy.sh, un servizio gratuito di notifiche senza bisogno di
+     account. Appena il telefono arriva alla schermata finale manda un segnale qui; il PC lo
+     riceve e mostra a sua volta una chiusura con lo stesso link Telegram. Se ntfy.sh non è
+     raggiungibile il PC semplicemente non mostra nulla: il gioco sul telefono funziona comunque. */
+  const SYNC_TOPIC = "labirinternet-cristian-viscione-finale-k7qz3m";
+  const TELEGRAM_URL = "https://t.me/+oPmQFKv_atYxNmQ0";
+  let pcFinaleListenerStarted = false;
+  function startPcFinaleListener(){
+    if(pcFinaleListenerStarted) return;
+    pcFinaleListenerStarted = true;
+    try{
+      const es = new EventSource('https://ntfy.sh/' + SYNC_TOPIC + '/sse');
+      es.onmessage = () => { showPcFinale(); try{ es.close(); }catch(e){} };
+      es.onerror = () => {}; /* ntfy riprova a riconnettersi da solo: non serve gestirlo */
+    }catch(e){}
+  }
+  function showPcFinale(){
+    if(document.getElementById('pc-finale')) return;
+    const div = document.createElement('div');
+    div.id = 'pc-finale';
+    div.style.cssText = 'position:fixed; inset:0; z-index:600000; background:#000; color:#e9e3d2; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; font-family:Georgia,serif; letter-spacing:.08em; text-align:center; padding:30px; opacity:0; transition:opacity 1.6s ease;';
+    div.innerHTML = '<div style="font-size:36px; font-weight:700;">LABIRINTERNET</div>'
+      + '<div style="font-size:14px; line-height:1.6; max-width:420px;">Qualcun altro, da qualche parte, ha appena finito di parlare con Benedetta.</div>'
+      + '<a href="' + TELEGRAM_URL + '" target="_blank" style="margin-top:6px; font-family:\'Courier New\',monospace; font-size:12px; letter-spacing:.03em; cursor:pointer; color:#e9e3d2; text-decoration:none; border-bottom:1px dotted #666;">entra nel gruppo Telegram</a>';
+    document.body.appendChild(div);
+    requestAnimationFrame(()=> requestAnimationFrame(()=>{ div.style.opacity = 1; }));
   }
 
   /* ---------- timer di 5 minuti + batteria che si scarica dal 20% ---------- */
@@ -1755,6 +1787,11 @@
         introAmbientTimer = setTimeout(scheduleGlimmer, 3500 + Math.random()*4000);
       }
       introAmbientTimer = setTimeout(scheduleGlimmer, 2000 + Math.random()*2000);
+      /* rete di sicurezza: se per qualche motivo il prologo non chiama mai fadeOutIntroAmbient
+         (errore imprevisto, percorso non previsto su un browser particolare), il suono ambientale
+         non deve restare "costante" per sempre in sottofondo. 60s basta a coprire anche una lettura
+         lenta di tutte le 14 righe senza mai cliccare (3s di attesa automatica ciascuna). */
+      setTimeout(() => { fadeOutIntroAmbient(1500); }, 60000);
     }catch(e){}
   }
   function fadeOutIntroAmbient(durationMs){
@@ -1799,12 +1836,17 @@
       container.style.opacity = 0;
       introTimer = setTimeout(() => {
         i++; j = 0; lineDone = false;
-        transitioning = false;
-        if(i >= righe.length){ finishIntro(); return; }
+        if(i >= righe.length){ transitioning = false; finishIntro(); return; }
         document.getElementById('iline-current').textContent = '';
         container.style.opacity = 1;
         maybeToggleCup(i);
         step();
+        /* "transitioning" resta attivo anche durante la dissolvenza IN della nuova riga (altri
+           450ms): così un tap troppo rapido non può interrompere la nuova riga mentre sta ancora
+           apparendo, che è la causa delle scritte che sembrano sovrapporsi cliccando in fretta.
+           La riga precedente scompare SEMPRE del tutto prima che la successiva possa reagire a un
+           altro clic. */
+        setTimeout(() => { transitioning = false; }, 450);
       }, 450);
     };
     const step = () => {
