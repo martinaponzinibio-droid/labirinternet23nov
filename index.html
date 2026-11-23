@@ -2,6 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>LABIRINTERNET — Forza 4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -126,6 +129,7 @@
   /* ---------- finestre ---------- */
   .window{
     position:absolute; min-width:300px; min-height:160px;
+    max-width:94vw; max-height:88vh;
     background:var(--paper); border:1px solid #06080b; border-radius:14px; overflow:hidden;
     box-shadow:0 14px 34px rgba(0,0,0,.55); display:flex; flex-direction:column; color:var(--ink);
   }
@@ -218,9 +222,9 @@
   .f4-sub{ font-size:11px; color:var(--ink-soft); }
 
   /* ---------- partita + conversazione con Martina ---------- */
-  #win-match{ width:720px; height:480px; background:#fff; }
-  #win-match .window-body{ display:flex; padding:0; background:#fff; }
-  .match-board-col{ width:340px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#eef1f6; border-right:1px solid #e3e3e3; padding:14px; }
+  #win-match{ width:720px; max-width:94vw; height:480px; max-height:88vh; background:#fff; }
+  #win-match .window-body{ display:flex; padding:0; background:#fff; min-width:0; min-height:0; }
+  .match-board-col{ width:340px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#eef1f6; border-right:1px solid #e3e3e3; padding:14px; }
   #c4board{ display:grid; grid-template-columns:repeat(7,38px); grid-template-rows:repeat(6,38px); gap:4px; background:#2f5bb0; padding:8px; border-radius:10px; }
   .c4cell{ width:38px; height:38px; border-radius:50%; background:#fff; cursor:pointer; }
   .c4cell.p1{ background:#f5c344; }
@@ -228,8 +232,8 @@
   /* la scritta di stato ora appare solo in chat (vedi setMatchStatus/.m-bubble.status): questo
      elemento resta nel markup per compatibilità col codice ma non è più visibile sotto la griglia */
   .c4-status{ display:none; }
-  .match-chat-col{ flex:1; display:flex; flex-direction:column; }
-  .match-log{ flex:1; overflow:auto; padding:14px 14px 70px; display:flex; flex-direction:column; gap:10px; }
+  .match-chat-col{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .match-log{ flex:1; min-height:0; overflow:auto; padding:14px 14px 70px; display:flex; flex-direction:column; gap:10px; }
   .m-bubble{ max-width:85%; padding:9px 12px; border-radius:13px; font-size:12.5px; line-height:1.5; background:#f0f0f0; align-self:flex-start; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
   .m-bubble.me{ align-self:flex-end; background:var(--sage); color:#fff; }
   .m-bubble.reveal{ background:#fff3c4; }
@@ -689,7 +693,7 @@
 <!-- ===================== WHATSAPP ===================== -->
 <div class="window hidden" id="win-yt" style="z-index:7;">
   <div class="titlebar" data-win="win-yt">
-    <div class="traffic"><span class="dot red" onclick="closeWin('win-yt')"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+    <div class="traffic"><span class="dot red" onclick="closeYouTube()"></span><span class="dot yellow"></span><span class="dot green"></span></div>
     <span>YouTube</span>
   </div>
   <div class="window-body">
@@ -760,6 +764,23 @@
     });
   }
   let cascadeIndex = 0;
+  function clampWinPosition(el){
+    /* evita che una finestra (es. la chat con Martina) finisca parzialmente fuori dallo
+       schermo: siccome html,body hanno overflow:hidden, la parte che esce sarebbe
+       semplicemente irraggiungibile e il testo "sparirebbe" oltre il bordo */
+    if(document.documentElement.classList.contains('is-mobile')) return;
+    const rect = el.getBoundingClientRect();
+    const maxLeft = Math.max(0, window.innerWidth - rect.width - 6);
+    const maxTop = Math.max(0, window.innerHeight - rect.height - 6);
+    let left = parseFloat(el.style.left);
+    let top = parseFloat(el.style.top);
+    if(isNaN(left)) left = rect.left;
+    if(isNaN(top)) top = rect.top;
+    left = Math.min(Math.max(0, left), maxLeft);
+    top = Math.min(Math.max(0, top), maxTop);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  }
   function openWin(id){
     const el = document.getElementById(id);
     if(!el.dataset.positioned){
@@ -770,10 +791,14 @@
     }
     el.classList.remove('hidden');
     bringToFront(el);
+    clampWinPosition(el);
     if(id === 'win-forza4'){ setIconHint('icon-forza4', false); }
     return el;
   }
   function closeWin(id){ document.getElementById(id).classList.add('hidden'); }
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.window:not(.hidden)').forEach(clampWinPosition);
+  });
   function makeDraggable(win){
     const bar = win.querySelector('.titlebar');
     if(!bar) return;
@@ -851,6 +876,14 @@
     v.src = "https://www.youtube.com/embed/" + YT_VIDEO_ID + "?autoplay=1&rel=0&playsinline=1";
     openWin('win-yt');
     setIconHint('icon-foto', true);
+  }
+  function closeYouTube(){
+    /* nascondere la finestra (display:none) non ferma l'audio dentro l'iframe di YouTube:
+       bisogna svuotare/ricaricare l'iframe per interrompere davvero la riproduzione,
+       anche se l'utente non ha mai cliccato pausa */
+    const v = document.getElementById('yt-video');
+    if(v) v.src = 'about:blank';
+    closeWin('win-yt');
   }
   function openFoto(){
     openWin('win-foto');
@@ -1525,9 +1558,29 @@
   function startPcFinaleListener(){
     if(pcFinaleListenerStarted) return;
     pcFinaleListenerStarted = true;
+    let already = false;
+    const fire = () => {
+      if(already) return;
+      already = true;
+      showPcFinale();
+    };
+    /* doppio canale per sicurezza: la connessione "push" (EventSource) è istantanea quando
+       funziona, ma su alcune reti (wifi del teatro, proxy aziendali) le connessioni aperte a
+       lungo come questa possono venire chiuse senza preavviso; in parallelo controlliamo quindi
+       anche "a intervalli" (polling) chiedendo a ntfy.sh se è arrivato qualcosa, così la
+       schermata finale compare comunque anche se il canale push non ha funzionato. */
+    const sinceTs = Math.floor(Date.now() / 1000);
+    function poll(){
+      if(already) return;
+      fetch('https://ntfy.sh/' + SYNC_TOPIC + '/json?poll=1&since=' + sinceTs)
+        .then(r => r.text())
+        .then(txt => { if(txt && txt.trim().length){ fire(); } else { setTimeout(poll, 4000); } })
+        .catch(() => { setTimeout(poll, 6000); });
+    }
+    poll();
     try{
       const es = new EventSource('https://ntfy.sh/' + SYNC_TOPIC + '/sse');
-      es.onmessage = () => { showPcFinale(); try{ es.close(); }catch(e){} };
+      es.onmessage = () => { fire(); try{ es.close(); }catch(e){} };
       es.onerror = () => {}; /* ntfy riprova a riconnettersi da solo: non serve gestirlo */
     }catch(e){}
   }
@@ -1727,8 +1780,22 @@
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       introAmbientCtx = ctx;
       /* su alcuni browser mobili (in particolare Safari iOS) l'AudioContext nasce "suspended"
-         anche dentro un gesto utente: va ripreso esplicitamente, altrimenti resta muto */
-      if(ctx.state === 'suspended'){ ctx.resume().catch(()=>{}); }
+         anche dentro un gesto utente: va ripreso esplicitamente, altrimenti resta muto.
+         IMPORTANTE: costruire il grafo audio e chiamare .start() PRIMA che resume() sia
+         davvero completato è il motivo più comune per cui su iPhone non si sente nulla anche
+         se il codice "sembra" girare: qui si aspetta che il context sia davvero 'running'
+         prima di creare qualunque oscillatore. */
+      const build = () => { buildIntroAmbientGraph(ctx); };
+      if(ctx.state === 'suspended'){
+        ctx.resume().then(build).catch(build);
+      } else {
+        build();
+      }
+    }catch(e){}
+  }
+  function buildIntroAmbientGraph(ctx){
+    if(!introAmbientRunning) return; /* nel frattempo è già stato richiamato fadeOut */
+    try{
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = -18; limiter.knee.value = 24; limiter.ratio.value = 10;
       limiter.attack.value = 0.01; limiter.release.value = 0.25;
@@ -1798,6 +1865,12 @@
     if(!introAmbientRunning || !introAmbientCtx) return;
     introAmbientRunning = false;
     if(introAmbientTimer){ clearTimeout(introAmbientTimer); introAmbientTimer = null; }
+    if(!introAmbientMaster){
+      /* resume() non aveva ancora finito quando è arrivato il fadeOut: non c'è niente da
+         dissolvere, chiudiamo semplicemente il context */
+      try{ introAmbientCtx.close(); }catch(e){}
+      return;
+    }
     try{
       const ctx = introAmbientCtx;
       introAmbientMaster.gain.cancelScheduledValues(ctx.currentTime);
