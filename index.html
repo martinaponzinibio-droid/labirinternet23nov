@@ -206,11 +206,14 @@
   #win-forza4 .window-body{ padding:0; background:#fff; }
   .f4-contact{ display:flex; align-items:center; gap:10px; padding:11px 12px; border-bottom:1px solid #eee; cursor:pointer; color:#1d1d1f; }
   #f4-pane-friends, #f4-pane-chat{ color:#1d1d1f; }
-  .f4-chat-log{ flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:3px; background:#fff; }
-  .f4-bubble-row{ display:flex; flex-direction:column; max-width:75%; }
+  .f4-chat-log{ flex:1; min-width:0; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:3px; background:#fff; }
+  /* .f4-bubble-row e .f4-bubble sono elementi flex: senza min-width:0 un testo lungo li fa
+     allargare oltre il max-width impostato (bug noto dei flex item), facendo "uscire" il
+     fumetto dal bordo destro della finestra invece di andare a capo */
+  .f4-bubble-row{ display:flex; flex-direction:column; max-width:75%; min-width:0; }
   .f4-bubble-row.me{ align-self:flex-end; align-items:flex-end; }
   .f4-bubble-row.them{ align-self:flex-start; align-items:flex-start; }
-  .f4-bubble{ padding:9px 14px; border-radius:18px; font-size:13px; line-height:1.4; margin:2px 0; }
+  .f4-bubble{ padding:9px 14px; border-radius:18px; font-size:13px; line-height:1.4; margin:2px 0; min-width:0; max-width:100%; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
   .f4-bubble-row.me .f4-bubble{ background:var(--sage-dark); color:#fff; border-bottom-right-radius:4px; }
   .f4-bubble-row.them .f4-bubble{ background:#efefef; color:#1d1d1f; border-bottom-left-radius:4px; }
   .f4-chat-input-row{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-top:1px solid #eee; background:#fff; }
@@ -234,7 +237,7 @@
   .c4-status{ display:none; }
   .match-chat-col{ flex:1; min-width:0; display:flex; flex-direction:column; }
   .match-log{ flex:1; min-height:0; overflow:auto; padding:14px 14px 70px; display:flex; flex-direction:column; gap:10px; }
-  .m-bubble{ max-width:85%; padding:9px 12px; border-radius:13px; font-size:12.5px; line-height:1.5; background:#f0f0f0; align-self:flex-start; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
+  .m-bubble{ max-width:85%; min-width:0; padding:9px 12px; border-radius:13px; font-size:12.5px; line-height:1.5; background:#f0f0f0; align-self:flex-start; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
   .m-bubble.me{ align-self:flex-end; background:var(--sage); color:#fff; }
   .m-bubble.reveal{ background:#fff3c4; }
   .m-bubble.status{ align-self:center; text-align:center; font-weight:700; letter-spacing:.02em; }
@@ -269,7 +272,7 @@
   .wa-back{ cursor:pointer; font-size:18px; }
   #wa-chat-pane{ display:flex; flex-direction:column; height:100%; }
   .wa-log{ flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:8px; }
-  .wa-bubble{ max-width:78%; padding:8px 12px; border-radius:9px; font-size:12.5px; line-height:1.5; background:#fff; align-self:flex-start; box-shadow:0 1px 1px rgba(0,0,0,.08); }
+  .wa-bubble{ max-width:78%; min-width:0; padding:8px 12px; border-radius:9px; font-size:12.5px; line-height:1.5; background:#fff; align-self:flex-start; box-shadow:0 1px 1px rgba(0,0,0,.08); white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
   .wa-bubble.me{ align-self:flex-end; background:#dcf8c6; }
   .wa-input-row{ display:flex; gap:8px; padding:10px; background:#f0f0f0; position:sticky; bottom:0; z-index:2; }
   .wa-input-row textarea{ flex:1; padding:9px 12px; border-radius:18px; border:1px solid #ccc; font-family:inherit; font-size:12.5px; resize:none; min-height:36px; max-height:100px; overflow:auto; line-height:1.4; white-space:pre-wrap; word-wrap:break-word; }
@@ -1906,6 +1909,14 @@
       if(transitioning) return; /* una transizione è già in corso: ignora chiamate duplicate (tap multipli, auto+tap in corsa) */
       transitioning = true;
       if(introAutoAdvance){ clearTimeout(introAutoAdvance); introAutoAdvance = null; }
+      /* svuota SUBITO il testo della riga corrente, senza aspettare che finisca l'animazione
+         di dissolvenza: su alcuni telefoni, sotto carico, il fotogramma "invisibile" della
+         dissolvenza può venire saltato dal browser, e in quel caso si vedrebbe ancora la riga
+         vecchia mentre inizia a comparire quella nuova (l'effetto "sovrapposizione" segnalato).
+         Svuotando il testo nello stesso istante del tap, quella riga vecchia semplicemente non
+         esiste più: nel peggiore dei casi si vede un breve vuoto, mai testo sovrapposto. */
+      const curNow = document.getElementById('iline-current');
+      if(curNow) curNow.textContent = '';
       container.style.opacity = 0;
       introTimer = setTimeout(() => {
         i++; j = 0; lineDone = false;

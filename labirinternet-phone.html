@@ -65,7 +65,7 @@ body{ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 }
   .wa-back{ cursor:pointer; font-size:22px; }
   .wa-log{ flex:1; overflow:auto; padding:14px 14px 70px; display:flex; flex-direction:column; gap:8px; }
-  .wa-bubble{ max-width:78%; padding:8px 12px 4px; border-radius:8px; font-size:14px; line-height:1.5; background:#fff; color:#1d1d1f; align-self:flex-start; box-shadow:0 1px 0.5px rgba(0,0,0,.13); position:relative; }
+  .wa-bubble{ max-width:78%; min-width:0; padding:8px 12px 4px; border-radius:8px; font-size:14px; line-height:1.5; background:#fff; color:#1d1d1f; align-self:flex-start; box-shadow:0 1px 0.5px rgba(0,0,0,.13); position:relative; white-space:normal; word-wrap:break-word; overflow-wrap:break-word; }
 .wa-bubble.me{ background:#dcf8c6; }
 .wa-bubble::after{ content:''; position:absolute; bottom:0; left:-8px; width:0; height:0; border:8px solid transparent; border-right-color:#fff; border-bottom:0; border-left:0; }
 .wa-bubble.me::after{ left:auto; right:-8px; border-right:0; border-left:8px solid transparent; border-left-color:#dcf8c6; }
@@ -294,6 +294,28 @@ body{ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     b.appendChild(text);
     log.appendChild(b);
     log.scrollTop = log.scrollHeight;
+    if(node.who !== 'me'){ playWaNotifySound(); }
+  }
+  /* ---------- "pop" di notifica in stile WhatsApp per i messaggi in arrivo da Benedetta:
+     generato via Web Audio (nessun file audio incorporato), riusa il context condiviso già
+     sbloccato al primo tocco sulla pagina (vedi ensureSharedAudioCtx) ---------- */
+  function playWaNotifySound(){
+    const ctx = ensureSharedAudioCtx();
+    if(!ctx) return;
+    try{
+      const t = ctx.currentTime;
+      const g = ctx.createGain();
+      g.connect(ctx.destination);
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1100, t);
+      osc.frequency.exponentialRampToValueAtTime(1500, t + 0.09);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.22, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      osc.connect(g);
+      osc.start(t); osc.stop(t + 0.18);
+    }catch(e){}
   }
   let waError = null;
   function resizeWaTextarea(el){
