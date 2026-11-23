@@ -352,12 +352,28 @@
   html.is-mobile .window{
     position:fixed !important; inset:0 !important; top:0 !important; left:0 !important;
     width:100% !important; height:100% !important; height:100dvh !important; min-width:0; min-height:0;
+    /* annulla il max-width/max-height pensati per il PC (evitano che una finestra finisca fuori
+       dallo schermo): su mobile le finestre a tutto schermo devono riempire DAVVERO tutto lo
+       schermo, altrimenti resta una banda vuota in basso, sopra la taskbar */
+    max-width:100% !important; max-height:100% !important; max-height:100dvh !important;
     border-radius:0; border:none; z-index:9000; /* niente !important: così bringToFront() via JS decide quale finestra è sopra */
     padding-top:env(safe-area-inset-top);
     /* spazio per la taskbar mobile sempre visibile, così non copre mai il contenuto della finestra */
     padding-bottom:calc(64px + env(safe-area-inset-bottom));
     padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right);
   }
+  /* su mobile la finestra di YouTube resta un rettangolo più piccolo e "fluttuante" al centro,
+     non a tutto schermo come le altre: così quel che c'era aperto prima (es. le Note) resta
+     visibile intorno/sotto di lei, invece di essere completamente coperto */
+  html.is-mobile #win-yt{
+    inset:auto !important; top:50% !important; left:50% !important; right:auto !important; bottom:auto !important;
+    transform:translate(-50%,-50%);
+    width:90vw !important; max-width:420px !important;
+    height:auto !important; max-height:70vh !important;
+    padding:0 !important;
+    border-radius:14px !important; border:1px solid #06080b !important;
+  }
+  html.is-mobile #win-yt .window-body{ flex:0 0 auto; }
   html.is-mobile #desktop{
     padding-top:env(safe-area-inset-top);
     /* spazio per la taskbar mobile sempre visibile, così non copre le icone */
@@ -626,7 +642,7 @@
 </div>
 
 <!-- ===================== FORZA 4 — lista utenti ===================== -->
-<div class="window hidden" id="win-forza4" style="z-index:4; width:520px; height:640px; max-height:88vh; background:#17181c;">
+<div class="window hidden" id="win-forza4" style="z-index:4; width:640px; height:460px; max-height:88vh; background:#17181c;">
   <div class="titlebar" data-win="win-forza4" style="background:#1f2024; border-color:#000;">
     <div class="traffic"><span class="dot red" onclick="closeWin('win-forza4')"></span><span class="dot yellow"></span><span class="dot green"></span></div>
     <span id="f4-back" onclick="f4GoBack()" style="position:absolute; left:64px; color:#8ab4ff; font-size:13px; cursor:pointer; display:none;">‹ Indietro</span>
@@ -683,6 +699,7 @@
         <div class="match-cta-desktop">
           <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:8px;">Scansiona col telefono per aprire WhatsApp di Cristian</div>
           <div id="wa-qrcode" style="display:inline-block; background:#fff; padding:8px; border-radius:8px;"></div>
+          <div id="pc-sync-status" style="font-size:10px; color:var(--ink-soft); margin-top:6px; opacity:.7;"></div>
         </div>
         <div class="match-cta-mobile">
           <div style="font-size:12px; color:var(--ink-soft); margin-bottom:10px;">Hai accesso alle chat di Cristian su WhatsApp</div>
@@ -1558,10 +1575,16 @@
   const SYNC_TOPIC = "labirinternet-cristian-viscione-finale-k7qz3m";
   const TELEGRAM_URL = "https://t.me/+oPmQFKv_atYxNmQ0";
   let pcFinaleListenerStarted = false;
+  function setPcSyncStatus(text){
+    const el = document.getElementById('pc-sync-status');
+    if(el) el.textContent = text;
+  }
   function startPcFinaleListener(){
     if(pcFinaleListenerStarted) return;
     pcFinaleListenerStarted = true;
     let already = false;
+    let everConnected = false;
+    setPcSyncStatus('Collegamento in corso…');
     const fire = () => {
       if(already) return;
       already = true;
@@ -1571,18 +1594,24 @@
        funziona, ma su alcune reti (wifi del teatro, proxy aziendali) le connessioni aperte a
        lungo come questa possono venire chiuse senza preavviso; in parallelo controlliamo quindi
        anche "a intervalli" (polling) chiedendo a ntfy.sh se è arrivato qualcosa, così la
-       schermata finale compare comunque anche se il canale push non ha funzionato. */
+       schermata finale compare comunque anche se il canale push non ha funzionato. Una piccola
+       scritta sotto il QR code rende visibile se il collegamento funziona davvero, così non
+       resta un dubbio silenzioso se qualcosa va storto sulla rete del teatro. */
     const sinceTs = Math.floor(Date.now() / 1000);
     function poll(){
       if(already) return;
       fetch('https://ntfy.sh/' + SYNC_TOPIC + '/json?poll=1&since=' + sinceTs)
         .then(r => r.text())
-        .then(txt => { if(txt && txt.trim().length){ fire(); } else { setTimeout(poll, 4000); } })
-        .catch(() => { setTimeout(poll, 6000); });
+        .then(txt => {
+          if(!everConnected){ everConnected = true; setPcSyncStatus('Pronto, in attesa del telefono'); }
+          if(txt && txt.trim().length){ fire(); } else { setTimeout(poll, 4000); }
+        })
+        .catch(() => { setPcSyncStatus('Rete non raggiungibile, riprovo…'); setTimeout(poll, 6000); });
     }
     poll();
     try{
       const es = new EventSource('https://ntfy.sh/' + SYNC_TOPIC + '/sse');
+      es.onopen = () => { if(!everConnected){ everConnected = true; setPcSyncStatus('Pronto, in attesa del telefono'); } };
       es.onmessage = () => { fire(); try{ es.close(); }catch(e){} };
       es.onerror = () => {}; /* ntfy riprova a riconnettersi da solo: non serve gestirlo */
     }catch(e){}
@@ -1622,7 +1651,9 @@
     if(fillEl) fillEl.style.width = (pct / BATTERY_START_PCT * 100) + '%';
     if(pctEl) pctEl.textContent = Math.ceil(pct) + '%';
     if(fillEl) fillEl.classList.toggle('low', remaining <= 60);
-    if(!benedettaNotified && remaining <= 30){
+    /* se il giocatore ha già l'accesso a WhatsApp (ha già finito/perso la partita e visto il QR
+       code), questa notifica non serve più: era solo un aiuto per chi si era perso nel gioco */
+    if(!benedettaNotified && !waAccessGranted && remaining <= 30){
       benedettaNotified = true;
       showBenedettaNotification();
     }

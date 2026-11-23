@@ -279,9 +279,16 @@ body{ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     waIndex = 0;
     document.getElementById('wa-log').innerHTML = '';
     document.getElementById('wa-input').addEventListener('keydown',(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendWaMessage(); } });
-    waPlayBenTurn(); /* il primo messaggio è quello urgente di Benedetta: deve comparire da solo */
+    /* il primissimo messaggio di Benedetta ("Ho bisogno di parlarti") deve apparire già presente
+       appena si apre la chat, come se fosse stato mandato prima: niente ritardo né suono di
+       notifica, altrimenti sembra un messaggio appena arrivato in quel momento. */
+    if(WA_SCRIPT.length && WA_SCRIPT[0].who === 'ben'){
+      addWaBubble(WA_SCRIPT[0], { silent:true });
+      waIndex = 1;
+    }
+    waPlayBenTurn();
   }
-  function addWaBubble(node){
+  function addWaBubble(node, opts){
     const log = document.getElementById('wa-log');
     const b = document.createElement('div');
     b.className = 'wa-bubble' + (node.who==='me' ? ' me' : '');
@@ -294,7 +301,9 @@ body{ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     b.appendChild(text);
     log.appendChild(b);
     log.scrollTop = log.scrollHeight;
-    if(node.who !== 'me'){ playWaNotifySound(); }
+    /* "silent" serve per il primo messaggio di Benedetta, che deve sembrare già presente da
+       prima dell'apertura della chat: niente suono di notifica, come se fosse già arrivato */
+    if(node.who !== 'me' && !(opts && opts.silent)){ playWaNotifySound(); }
   }
   /* ---------- "pop" di notifica in stile WhatsApp per i messaggi in arrivo da Benedetta:
      generato via Web Audio (nessun file audio incorporato), riusa il context condiviso già
