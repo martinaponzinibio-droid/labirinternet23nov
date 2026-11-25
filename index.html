@@ -1627,6 +1627,9 @@
       }).catch(()=>{});
     }catch(e){}
   }
+  /* il segnale parte SUBITO, appena la pagina si apre (non più solo a prologo finito): per chi
+     guarda il pannello di regia "entrato nel link" significa proprio questo, aprire il link */
+  notifyRegiaJoin();
   function renderWaQrCode(){
     waAccessGranted = true;
     const el = document.getElementById('wa-qrcode');
@@ -2097,7 +2100,6 @@
   function introEnd(){
     document.getElementById('intro').classList.add('off');
     openWin('win-notes');
-    notifyRegiaJoin(); /* da qui in poi il giocatore è davvero "in partita": lo segnala al pannello di regia */
     /* la batteria al 20% deve comparire solo ora, entrando nel desktop, non durante il prologo */
     const _batteryHud = document.getElementById('battery-hud');
     if(_batteryHud) _batteryHud.style.display = 'flex';
