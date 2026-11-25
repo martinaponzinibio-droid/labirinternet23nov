@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Labirinternet — Regia</title>
+<style>
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; background:#0b0c0e; color:#e9e3d2;
+    font-family:Georgia,serif; display:flex; flex-direction:column; align-items:center;
+    padding:30px 18px 60px;
+  }
+  h1{ font-size:20px; letter-spacing:.1em; font-weight:700; margin:0 0 4px; text-align:center; }
+  .sub{ font-size:12px; opacity:.55; margin-bottom:28px; text-align:center; font-family:"Courier New",monospace; }
+  .big-count{
+    font-size:min(22vw,150px); font-weight:700; line-height:1; color:#f5c344;
+    text-shadow:0 0 40px rgba(245,195,68,.25);
+  }
+  .big-label{ font-size:13px; letter-spacing:.15em; opacity:.75; margin-top:6px; text-transform:uppercase; }
+  .stats-row{ display:flex; gap:14px; margin-top:34px; flex-wrap:wrap; justify-content:center; }
+  .stat-card{
+    background:#16181c; border:1px solid #2a2d33; border-radius:12px; padding:16px 22px;
+    min-width:150px; text-align:center;
+  }
+  .stat-card .n{ font-size:32px; font-weight:700; color:#e9e3d2; }
+  .stat-card .l{ font-size:11px; opacity:.6; margin-top:4px; letter-spacing:.06em; }
+  .status-line{ font-size:11px; font-family:"Courier New",monospace; opacity:.5; margin-top:22px; text-align:center; }
+  .status-line.err{ color:#e06c5a; opacity:.9; }
+  table{ border-collapse:collapse; margin-top:34px; width:100%; max-width:560px; font-size:13px; }
+  th, td{ padding:8px 12px; text-align:left; border-bottom:1px solid #22252a; }
+  th{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; opacity:.55; font-weight:600; }
+  td.mono{ font-family:"Courier New",monospace; font-size:11.5px; opacity:.8; }
+  .empty-row{ opacity:.4; font-style:italic; padding:16px; text-align:center; }
+  .stale{ opacity:.45; }
+  .stale .badge{ color:#e06c5a; }
+  .badge{ font-size:10px; padding:2px 7px; border-radius:20px; background:#22252a; margin-left:6px; }
+  #reset-btn{
+    margin-top:38px; background:#22252a; color:#e9e3d2; border:1px solid #3a3d44; border-radius:8px;
+    padding:10px 18px; font-family:"Courier New",monospace; font-size:12px; cursor:pointer; letter-spacing:.04em;
+  }
+  #reset-btn:hover{ background:#2a2d33; }
+  #reset-confirm{ display:none; margin-top:10px; font-size:11.5px; opacity:.8; text-align:center; }
+  #reset-confirm button{
+    margin:0 6px; background:#3a3d44; color:#e9e3d2; border:none; border-radius:6px; padding:6px 12px;
+    font-family:"Courier New",monospace; font-size:11px; cursor:pointer;
+  }
+  #reset-confirm button.yes{ background:#8a3a30; }
+</style>
+</head>
+<body>
+
+<h1>LABIRINTERNET — PANNELLO DI REGIA</h1>
+<div class="sub">non condividere questo indirizzo con i giocatori</div>
+
+<div class="big-count" id="active-count">—</div>
+<div class="big-label">giocatori attualmente in partita</div>
+
+<div class="stats-row">
+  <div class="stat-card"><div class="n" id="stat-joined">—</div><div class="l">entrati in totale</div></div>
+  <div class="stat-card"><div class="n" id="stat-finished">—</div><div class="l">arrivati a Benedetta</div></div>
+  <div class="stat-card"><div class="n" id="stat-stale">—</div><div class="l">forse abbandonate</div></div>
+</div>
+
+<table id="active-table">
+  <thead><tr><th>Giocatore</th><th>Entrato da</th><th>Stato</th></tr></thead>
+  <tbody id="active-tbody"></tbody>
+</table>
+
+<div class="status-line" id="status-line">collegamento in corso…</div>
+
+<button id="reset-btn">Azzera il conteggio da adesso</button>
+<div id="reset-confirm">
+  Tutte le partite viste finora verranno ignorate da questo pannello (resta tutto visibile ai giocatori, cambia solo quello che vedi qui). Confermi?
+  <div style="margin-top:8px;">
+    <button class="yes" id="reset-yes">Sì, azzera</button>
+    <button id="reset-no">Annulla</button>
+  </div>
+</div>
+
+<script>
+  /* ---------- pannello di regia ----------
+     Mostra in tempo reale quanti giocatori sono "in partita adesso", ricostruendo lo stato a
+     partire dai segnali che ogni giocatore manda da solo durante il gioco (vedi "join"/"leave"
+     in labirinternet-forza4.html e labirinternet-phone.html), tramite lo stesso servizio
+     gratuito di notifiche (ntfy.sh, nessun account) già usato per il collegamento PC<->telefono.
+     Non esiste un vero database: questa pagina si limita a rileggere la storia dei segnali
+     arrivati sul canale e a contare quanti risultano "entrati" ma non ancora "usciti". */
+  const REGIA_TOPIC = "labirinternet-cristian-viscione-regia-k7qz3m";
+  const RESET_KEY = "labirinternet_regia_reset_at";
+  /* una partita reale non dura mai più di ~20-25 minuti: oltre questo tempo, se non è mai
+     arrivato un segnale di "uscita", quasi certamente quella partita è stata abbandonata
+     (telefono scarico, giocatore andato via, pagina ricaricata per errore...): la trattiamo
+     come "forse abbandonata" e non la conto più tra chi sta ancora giocando davvero, altrimenti
+     il conteggio potrebbe non arrivare mai a 0 per colpa di una sola sessione fantasma. */
+  const STALE_AFTER_MS = 28 * 60 * 1000;
+
+  function getResetAt(){
+    const v = localStorage.getItem(RESET_KEY);
+    return v ? Number(v) : 0;
+  }
+
+  function fmtElapsed(ms){
+    const mins = Math.floor(ms / 60000);
+    if(mins < 1) return 'meno di un minuto fa';
+    if(mins === 1) return '1 minuto fa';
+    if(mins < 60) return mins + ' minuti fa';
+    const h = Math.floor(mins/60), m = mins % 60;
+    return h + 'h ' + m + 'min fa';
+  }
+
+  async function fetchAllMessages(){
+    const resetAt = getResetAt();
+    const sinceSec = Math.max(Math.floor(resetAt/1000), Math.floor(Date.now()/1000) - 12*3600);
+    const res = await fetch('https://ntfy.sh/' + REGIA_TOPIC + '/json?poll=1&since=' + sinceSec);
+    const txt = await res.text();
+    const lines = txt.split('\n').map(l=>l.trim()).filter(Boolean);
+    const out = [];
+    for(const line of lines){
+      try{
+        const obj = JSON.parse(line);
+        if(obj.event === 'message' && typeof obj.message === 'string'){
+          out.push({ time: obj.time * 1000, message: obj.message });
+        }
+      }catch(e){}
+    }
+    return out;
+  }
+
+  function render(sessions, joinedTotal, finishedTotal){
+    const now = Date.now();
+    const rows = [];
+    let active = 0, stale = 0;
+    const list = Object.keys(sessions)
+      .map(id => ({ id, ...sessions[id] }))
+      .sort((a,b) => b.joinedAt - a.joinedAt);
+
+    for(const s of list){
+      if(s.leftAt) continue; /* già tornato/a: non compare più nella lista "in corso" */
+      const age = now - s.joinedAt;
+      const isStale = age > STALE_AFTER_MS;
+      if(isStale) stale++; else active++;
+      rows.push(
+        '<tr class="' + (isStale ? 'stale' : '') + '">'
+        + '<td class="mono">' + s.id + '</td>'
+        + '<td>' + fmtElapsed(age) + '</td>'
+        + '<td>' + (isStale ? '<span class="badge">forse abbandonata</span>' : 'in partita') + '</td>'
+        + '</tr>'
+      );
+    }
+
+    document.getElementById('active-count').textContent = active;
+    document.getElementById('stat-joined').textContent = joinedTotal;
+    document.getElementById('stat-finished').textContent = finishedTotal;
+    document.getElementById('stat-stale').textContent = stale;
+    document.getElementById('active-tbody').innerHTML = rows.length
+      ? rows.join('')
+      : '<tr><td colspan="3" class="empty-row">nessun giocatore attualmente in partita</td></tr>';
+  }
+
+  let pollFailures = 0;
+  async function refresh(){
+    try{
+      const msgs = await fetchAllMessages();
+      const sessions = {}; // id -> {joinedAt, leftAt}
+      let joinedTotal = 0, finishedTotal = 0;
+      for(const m of msgs){
+        if(m.message.startsWith('join:')){
+          const id = m.message.slice(5);
+          if(!sessions[id]){ sessions[id] = { joinedAt: m.time }; joinedTotal++; }
+        } else if(m.message.startsWith('leave:')){
+          const id = m.message.slice(6);
+          if(!sessions[id]) sessions[id] = { joinedAt: m.time };
+          if(!sessions[id].leftAt){ sessions[id].leftAt = m.time; finishedTotal++; }
+        }
+      }
+      render(sessions, joinedTotal, finishedTotal);
+      pollFailures = 0;
+      document.getElementById('status-line').className = 'status-line';
+      document.getElementById('status-line').textContent = 'aggiornato alle ' + new Date().toLocaleTimeString('it-IT');
+    }catch(e){
+      pollFailures++;
+      document.getElementById('status-line').className = 'status-line err';
+      document.getElementById('status-line').textContent = 'rete non raggiungibile, riprovo… (' + pollFailures + ')';
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 4000);
+
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    document.getElementById('reset-confirm').style.display = 'block';
+  });
+  document.getElementById('reset-no').addEventListener('click', () => {
+    document.getElementById('reset-confirm').style.display = 'none';
+  });
+  document.getElementById('reset-yes').addEventListener('click', () => {
+    localStorage.setItem(RESET_KEY, String(Date.now()));
+    document.getElementById('reset-confirm').style.display = 'none';
+    refresh();
+  });
+</script>
+</body>
+</html>
