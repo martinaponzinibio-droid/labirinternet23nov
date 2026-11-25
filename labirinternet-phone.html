@@ -129,12 +129,17 @@ body{ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   const TELEGRAM_URL = "https://t.me/+oPmQFKv_atYxNmQ0";
   /* ---------- "telefono e PC che si parlano": quando il telefono arriva alla schermata finale,
      manda un piccolo segnale a ntfy.sh (servizio gratuito di notifiche, nessun account richiesto)
-     su un canale dedicato a questo spettacolo. Il computer di Cristian resta in ascolto sullo
-     stesso canale e, quando lo riceve, mostra a sua volta una schermata di chiusura. Se il
-     telefono non ha connessione in quel momento il segnale va semplicemente perso (try/catch):
-     l'esperienza sul telefono funziona comunque, resta solo "silenzioso" per il PC. */
-  const SYNC_TOPIC = "labirinternet-cristian-viscione-finale-k7qz3m";
+     su un canale dedicato a QUESTA partita. Il computer che ha generato il QR code (o il link)
+     mette il proprio identificativo di sessione nel parametro "s" dell'indirizzo: lo leggiamo da
+     qui e lo usiamo per costruire lo stesso canale, così il segnale arriva SOLO al PC di chi ha
+     generato quel link, non a tutti i PC collegati in quel momento. Senza quell'identificativo
+     (link aperto senza passare da un PC) non c'è nessun PC specifico da avvisare, quindi non si
+     manda nulla: è proprio questo che prima causava, con più giocatori contemporaneamente, lo
+     "scatto improvviso alla chat Telegram" sul PC di un giocatore che non c'entrava nulla. */
+  const PC_SESSION_ID = new URLSearchParams(window.location.search).get('s');
+  const SYNC_TOPIC = PC_SESSION_ID ? ("labirinternet-cristian-viscione-finale-k7qz3m-" + PC_SESSION_ID) : null;
   function notifySyncEnd(){
+    if(!SYNC_TOPIC) return;
     try{
       fetch('https://ntfy.sh/' + SYNC_TOPIC, {
         method: 'POST',

@@ -438,7 +438,14 @@
     width:100%; border-right:none; border-bottom:1px solid #e3e3e3; padding:16px 10px; flex-shrink:0;
   }
   html.is-mobile .match-chat-col{ flex:1; min-height:0; }
-  html.is-mobile .match-log{ min-height:0; }
+  /* su mobile il log NON deve più "riempire tutto lo spazio rimasto": prima lo faceva, e con
+     pochi messaggi la domanda a scelta finiva spinta fino in fondo allo schermo, quasi invisibile
+     sopra la taskbar (segnalato da un giocatore su telefono). Ora il log prende solo lo spazio
+     che gli serve per il suo contenuto, e la domanda compare subito sotto, vicino a dove si sta
+     già guardando. */
+  html.is-mobile .match-log{ flex:0 1 auto; min-height:0; max-height:46vh; padding:14px 14px 10px; }
+  html.is-mobile .match-options{ flex-shrink:0; }
+  html.is-mobile .match-cta{ flex-shrink:0; }
 
   /* bivio: su desktop resta il QR, su telefono un pulsante che apre la chat */
   html.is-mobile .match-cta-desktop{ display:none; }
@@ -1281,8 +1288,8 @@
        scelta; solo dopo la risposta di Martina lei mette il pallino rosso. Se in questo turno non
        c'è più nessuna domanda da offrire (dialogo esaurito), Martina muove subito da sola — in
        quel caso è già il suo turno. Lo stato sotto la griglia riflette sempre la fase esatta. */
-    const dialogueComingUp = (dialogueStage >= 0 && dialogueStage <= 2);
-    setMatchStatus(dialogueComingUp ? 'Scegli una domanda' : 'È IL TURNO DI MARTINA');
+    /* su richiesta: in chat resta visibile solo "è il tuo turno" — le altre scritte
+       ("scegli una domanda", "è il turno di Martina") sono state tolte perché superflue */
     const hasDialogue = offerQuestions();
     if(!hasDialogue){
       setTimeout(martinaMove, 650);
@@ -1528,7 +1535,6 @@
           addMatchLine({ text: opt.reply, who:'them' });
           box.innerHTML = '';
           dialogueStage = choiceIndex + 1;
-          setMatchStatus('È IL TURNO DI MARTINA');
           setTimeout(martinaMove, 650);
         }, 350);
       };
@@ -1538,7 +1544,6 @@
   function playMartinaFinal(idx){
     if(idx >= MARTINA_FINAL.length){
       document.getElementById('match-options').innerHTML = '';
-      setMatchStatus('È IL TURNO DI MARTINA');
       dialogueStage = 4;
       setTimeout(martinaMove, 650);
       return;
@@ -1553,7 +1558,18 @@
      essere un indirizzo COMPLETO (con https://...) perché il QR code venga letto correttamente
      anche da un telefono che parte dalla fotocamera, non dal browser. Se in futuro il progetto
      viene rinominato su Vercel (cambia il sottodominio *.vercel.app), questo link va aggiornato. */
-  const PHONE_URL = "https://labirinternet23nov.vercel.app/labirinternet-phone.html";
+  /* identificativo casuale di QUESTA partita sul PC: usato per dare al collegamento con il
+     telefono (vedi sotto) un canale unico, diverso per ogni PC/giocatore */
+  const PC_SESSION_ID = (Math.random().toString(36).slice(2, 8) + Date.now().toString(36)).slice(0, 14);
+  const PHONE_URL_BASE = "https://labirinternet23nov.vercel.app/labirinternet-phone.html";
+  /* PHONE_URL porta anche l'id di QUESTA sessione del PC (?s=...), generato una volta sola al
+     caricamento della pagina: serve a dare al collegamento PC<->telefono (vedi SYNC_TOPIC più
+     sotto) un canale UNICO per ogni partita, invece di uno condiviso da tutti. Con più
+     giocatori collegati contemporaneamente allo stesso link, un canale condiviso farebbe sì che
+     il telefono di UN giocatore qualsiasi, arrivando alla fine, catapultasse ANCHE i PC di tutti
+     gli altri alla schermata finale nel bel mezzo della loro partita — esattamente il bug
+     segnalato il 25/11. */
+  const PHONE_URL = PHONE_URL_BASE + "?s=" + PC_SESSION_ID;
   function renderWaQrCode(){
     waAccessGranted = true;
     const el = document.getElementById('wa-qrcode');
@@ -1572,7 +1588,7 @@
      account. Appena il telefono arriva alla schermata finale manda un segnale qui; il PC lo
      riceve e mostra a sua volta una chiusura con lo stesso link Telegram. Se ntfy.sh non è
      raggiungibile il PC semplicemente non mostra nulla: il gioco sul telefono funziona comunque. */
-  const SYNC_TOPIC = "labirinternet-cristian-viscione-finale-k7qz3m";
+  const SYNC_TOPIC = "labirinternet-cristian-viscione-finale-k7qz3m-" + PC_SESSION_ID;
   const TELEGRAM_URL = "https://t.me/+oPmQFKv_atYxNmQ0";
   let pcFinaleListenerStarted = false;
   function setPcSyncStatus(text){
